@@ -1,10 +1,10 @@
 /**
-  * Be careful, this tool has used C++11 features and libraries,
-  * please use compiler that fully support C++11 in terms of 
-  * features and libraries.
-  *
-  * Known problems: GCC version lower than 4.9 will have run-time regex error since it didn't really implement C++ 11 regex library.
-  */
+ * If your compiler has good support for C++ (Especially regex), 
+ * then comment line "#define USE_BOOST" to use C++11 official library for regex.
+ * Otherwies, decomment line "#define USE_BOOST" to use boost regex. 
+ *
+ * Codes are based on boost 1.59 / gcc 4.8.5 on ORACLE Linux (3.8.13-118.13.3.el7uek).
+ */
 
 #define ALLOW_CORRECTION
 // #define USE_BOOST
