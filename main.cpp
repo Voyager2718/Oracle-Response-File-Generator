@@ -434,12 +434,18 @@ map<string, string> parseFunctions(map<string,string> m){
 
 void printUsage(){
     cout<<"Usage: rspg [OPTION]\n\
-Generate response file by local configurations. v0.1.0\n\n\
+Generate response file by local configurations. v0.1.1\n\n\
   -t\ttemplate file location. Default: template.rsp\n\
   -o\toutput location.\n\
   -n\tnumber of nodes.\n\
   -s\tsilent mode. Generated values are not displayed and do not allow users to modify.\n\
-  -h\tdisplay this help and exit"<<endl;
+  -h\tdisplay this help and exit\n\n\
+Template syntax:\n\
+  {{<function_name>}}\t<function_name> specifies the function that will be called during the generation.\n\n\
+Supported functions:\n\
+  getClusterNodes              generate value for oracle.install.crs.config.clusterNodes. E.g. rws1270317:rws1270317-v:HUB\n\
+  getNetworkInterfaceList      generate value for oracle.install.crs.config.networkInterfaceList. E.g. eth0:10.214.64.0:1\n\
+  getSCANName                  generate value for oracle.install.crs.config.gpnp.scanName. E.g. rws12703170320-r"<<endl;
 }
 
 int main(int argc, char *argv[]){
