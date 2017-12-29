@@ -7,13 +7,14 @@
  */
 
 #define ALLOW_CORRECTION
-// #define USE_BOOST
+#define USE_BOOST
 
 #include <iostream>
 #include <string>
 #include <sstream> 
 #include <fstream>
 #include <streambuf>
+#include <fstream>
 
 #include <unistd.h>
 #include <errno.h>
@@ -68,7 +69,9 @@ using std::regex_error;
 using std::map;
 using std::list;
 
-int numberOfNodes;
+int numberOfNodes = -1;
+
+bool silentMode = false;
 
 string prefix(string hostname);
 
@@ -91,23 +94,97 @@ string getSCANName(){
     string result = prefix(hstn) + "-r";
 
 #ifdef ALLOW_CORRECTION
-    cout<<"SCAN Name detection result: "<<endl;
-    result = modify(result);
+    if(!silentMode){
+        cout<<"SCAN Name detection result: "<<endl;
+        result = modify(result);
+    }
 #endif
 
     return result;
 }
 
-// TODO: rws1270317:rws1270317-v:HUB,rws1270318:rws1270318-v:HUB,rws1270319:rws1270319-v:HUB,rws1270320:rws1270320-v:HUB
 string getClusterNodes(){
-    char hostname[1024];
+    char hstn[1024];
 
-    gethostname(hostname, sizeof(hostname));
+    gethostname(hstn, sizeof(hstn));
 
-    string hstn(hostname);
+    string hostname(hstn);
 
-    return string(hostname);
-}
+    hostname = regex_replace(hostname, regex(string(".us.oracle.com")), string(""));
+
+    string result = "";
+
+    bool isAlphabetic = false;
+
+    string var = "";
+
+    const char *tmpc = hostname.substr(hostname.length() - 2, 1).c_str();
+    if(!((int)tmpc[0] >= 48 && (int)tmpc[0] <= 57)){
+        isAlphabetic = true;
+    }
+
+    var += hostname.substr(hostname.length() - 1, 1);
+
+    for(int i = 1; i < hostname.length(); i++){
+        const char *c = hostname.substr(hostname.length() - i - 1, 1).c_str();
+        if((isAlphabetic && ((int)c[0] >= 48 && (int)c[0] <= 57)) || (!isAlphabetic && !((int)c[0] >= 48 && (int)c[0] <= 57))){
+            break;
+        }
+        var += hostname.substr(hostname.length() - i - 1, 1);
+    }
+
+    var = var.substr(0, 4);
+
+    reverse(var.begin(), var.end());
+
+    int l = var.length();
+
+    string res = "";
+
+    for(int i = 0; i < numberOfNodes; i++){
+        try{
+            res = to_string((stoi(var) + i));  // string suffix.
+
+            for(int i = res.length(); i < l; i++){
+                res = "0" + res;
+            }
+        }catch(const invalid_argument& e){  // number suffix.
+            res = "";
+            char c = (char)((int)(var.substr(l - 1, 1).c_str()[0]) + i);
+            int carry = (int)((c - 97) / 26);
+
+            if((int) c > 122){
+                c = (char)(c - 26);
+            }
+
+            res = string(1, c) + res;
+
+            for(int i = 1; i < l; i ++){
+                char c = (char)((int)(var.substr(l - i - 1, 1).c_str()[0]) + carry);
+                carry = (int)((c - 97) / 26);
+
+                if((int) c > 122){
+                    c = (char)(c - 26);
+                }
+
+                res = string(1, c) + res;
+            }
+        }
+        string currentHostname = hostname.substr(0, hostname.length() - res.length()) + res;
+        result += currentHostname + ":" + currentHostname + "-v:HUB,";
+    }
+
+    result = result.substr(0, result.length() - 1);
+
+#ifdef ALLOW_CORRECTION
+    if(!silentMode){
+    cout<<"Cluster nodes detection result: "<<endl;
+    result = modify(result);
+    }
+#endif
+
+    return result;
+} 
 
 string getNetworkInterfaceList(){
     struct ifaddrs *ifaddr;
@@ -140,13 +217,15 @@ string getNetworkInterfaceList(){
             i++;
         }
         ifaddr = ifaddr-> ifa_next;
-    }while(ifaddr->ifa_next != NULL && i < 3);
+    }while(ifaddr->ifa_next != NULL);
 
     result = result.substr(0, result.length() - 1);
 
 #ifdef ALLOW_CORRECTION
-    cout<<"Network interface detection result:"<<endl;
-    result = modify(result);
+    if(!silentMode){
+        cout<<"Network interface detection result:"<<endl;
+        result = modify(result);
+    }
 #endif
 
     return result;
@@ -160,7 +239,7 @@ string modify(string mayNeedToModify){
     string input;
 
     while(true){
-        cout<<mayNeedToModify<<" Is this OK? [y/n]"<<endl;
+        cout<<mayNeedToModify<<endl<<"Is this OK? [y/n]"<<endl;
         cin>>input;
 
         if(input == "y"){
@@ -353,17 +432,73 @@ map<string, string> parseFunctions(map<string,string> m){
     return m;
 }
 
+void printUsage(){
+    cout<<"Usage: rspg [OPTION]\n\
+Generate response file by local configurations. v0.1.0\n\n\
+  -t\ttemplate file location. Default: template.rsp\n\
+  -o\toutput location.\n\
+  -n\tnumber of nodes.\n\
+  -s\tsilent mode. Generated values are not displayed and do not allow users to modify.\n\
+  -h\tdisplay this help and exit"<<endl;
+}
+
 int main(int argc, char *argv[]){
-    // map<string,string> m = parseFunctions(parseResponseFileTemplate(argv[1]));
+    int opt, flags;
 
-    // for (map<string,string>::iterator it=m.begin(); it!=m.end(); ++it){
-    //    cout<<it->first<<" -> "<<it->second<<endl;
-    // }
+    string n_nodes, templateLocation = "", outputLocation = "";
 
-    numberOfNodes = 3;
+    while((opt = getopt(argc, argv, "t:o:n:sh")) != -1){
+        switch(opt){
+            case 't': templateLocation = string(optarg); break;
+            case 'o': outputLocation = string(optarg); break;
+            case 'n': 
+                n_nodes = string(optarg);
+                try{
+                    numberOfNodes = stoi(n_nodes);
+                }catch(const invalid_argument& e){
+                    printUsage(); exit(EXIT_FAILURE);
+                }
+                break;
+            case 's': silentMode = true; break;
+            case 'h': printUsage(); exit(EXIT_SUCCESS); break;
+            default : printUsage(); exit(EXIT_FAILURE); break;
+        }
+    }
 
-    cout<<"SCAN Name detection result: "<<endl;
-    modify(prefix(argv[1]));
+    if(templateLocation == ""){
+        templateLocation = "./template.rsp";
+    }
+
+    if(outputLocation == ""){
+        cout<<"Enter a location to store response file."<<endl;
+        cin>>outputLocation;
+    }
+
+    while(numberOfNodes ==
+     -1){
+        cout<<"Please enter the number of nodes:"<<endl;
+        string n_nodes;
+        cin>>n_nodes;
+
+        try{
+            numberOfNodes = stoi(n_nodes);
+            break;
+        }catch(const invalid_argument& e){
+            continue;
+        }
+    }
+
+    map<string,string> m = parseFunctions(parseResponseFileTemplate(templateLocation));
+
+    std::fstream fs;
+    fs.open(outputLocation, std::fstream::in | std::fstream::out | std::fstream::app);
+
+    for (map<string,string>::iterator it=m.begin(); it!=m.end(); ++it){
+        cout<<it->first<<" -> "<<it->second<<endl;
+        fs<<it->first<<"="<<it->second<<endl;
+    }
+
+    fs.close();
 
     return 0;
 }
