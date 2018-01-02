@@ -1,7 +1,7 @@
 /**
  * If your compiler has good support for C++ (Especially regex), 
  * then comment line "#define USE_BOOST" to use C++11 official library for regex.
- * Otherwies, decomment line "#define USE_BOOST" to use boost regex. 
+ * Otherwies, uncomment line "#define USE_BOOST" to use boost regex. 
  *
  * Codes are based on boost 1.59 / gcc 4.8.5 on ORACLE Linux (3.8.13-118.13.3.el7uek).
  */
@@ -83,6 +83,8 @@ string modify(string mayNeedToModify);
 /**
   * ==== Convert Functions Part ====
   * Convert functions should be put here.
+  * When the parser has extracted the function name, it will invoke callFunction, then callFunction will invoke functions that are written here.
+  * Don't forget to add function name and function binding to callFunction. 
   */
 
 string getSCANName(string itemName){
@@ -92,7 +94,7 @@ string getSCANName(string itemName){
 
     string hstn(hostname);
 
-    hstn = regex_replace(hstn, regex(string(".us.oracle.com")), string(""));
+    hstn = regex_replace(hstn, regex(string(".us.oracle.com")), string(""));    // Remove suffix.
 
     string result = prefix(hstn) + "-r";
 
@@ -113,7 +115,7 @@ string getClusterNodes(string itemName){
 
     string hostname(hstn);
 
-    hostname = regex_replace(hostname, regex(string(".us.oracle.com")), string(""));
+    hostname = regex_replace(hostname, regex(string(".us.oracle.com")), string(""));    // Remove suffix.
 
     string result = "";
 
@@ -245,6 +247,8 @@ string userEdit(string itemName){
   * ==== Worker functions ====
   */
 
+
+// Print detected values and allow user to modify.
 string modify(string mayNeedToModify){
     string input;
 
@@ -263,6 +267,7 @@ string modify(string mayNeedToModify){
     }
 }
 
+// Generate SCAN/GNS prefix. (E.g. If node hostname is rws1270317 with 4 nodes, then it will generate rws12703170320)
 string prefix(string hostname){
     bool isAlphabetic = false;
 
@@ -322,6 +327,9 @@ string prefix(string hostname){
     return hostname + result;
 }    
 
+/* Stringify char* read from disk head.
+ * Cannot use string(char*) to do so since char* may not contains printable characters, so that it will cause problem.
+ */
 string convertToString(char* c, int size){
     string ret = "";
     for(int i = 0 ; i < size ; i++){
@@ -356,6 +364,7 @@ bool canBeUsedForDG(string diskPath){
     return diskHead.find("ORCL") == string::npos;
 }
 
+// Parse template response file and stores them into a map.
 map<string,string> parseResponseFileTemplate(string rspPath){
     ifstream rspStream(rspPath);
 
@@ -399,6 +408,7 @@ map<string,string> parseResponseFileTemplate(string rspPath){
     return m;
 }
 
+// Call function with their name.
 string callFunction(string itemName, string functionName){
     if(functionName == "getSCANName"){
         return getSCANName(itemName);
@@ -414,6 +424,7 @@ string callFunction(string itemName, string functionName){
     return "-> RSP Generator error: No such function <-";
 }
 
+// Parse dynamic values token, and call function to do the conversion.
 string parseDynamic(const string fst, const string sec){
     regex rgx(string("\\{\\{[\\s]*(\\w+)[\\s]*\\}\\}"));    // Dynamic call functions in {{ aaa }}.
 
@@ -432,6 +443,7 @@ string parseDynamic(const string fst, const string sec){
     return "";
 }
 
+// Scan the whole map, and call parseDynamic to determine the actual values.
 map<string, string> parseFunctions(map<string,string> m){
     string dym;
 
