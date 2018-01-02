@@ -8,6 +8,7 @@
 
 #define ALLOW_CORRECTION
 #define USE_BOOST
+#define VERSION "v0.2.1"
 
 #include <iostream>
 #include <string>
@@ -446,7 +447,7 @@ map<string, string> parseFunctions(map<string,string> m){
 
 void printUsage(){
     cout<<"Usage: rspg [OPTION]...\n\
-Generate response file by local configurations. v0.1.2\n\n\
+Generate response file by local configurations. "<<VERSION<<"\n\n\
   -t <template file>    template file location. Default: template.rsp\n\
   -o <output file>      output location.\n\
   -n <integer>          number of nodes.\n\
@@ -510,7 +511,7 @@ int main(int argc, char *argv[]){
     map<string,string> m = parseFunctions(parseResponseFileTemplate(templateLocation));
 
     std::fstream fs;
-    fs.open(outputLocation, std::fstream::in | std::fstream::out | std::fstream::app);
+    fs.open(outputLocation, std::fstream::in | std::fstream::out | std::fstream::trunc);
 
     if(!silentMode){
         for (map<string,string>::iterator it=m.begin(); it!=m.end(); ++it){
@@ -522,9 +523,9 @@ int main(int argc, char *argv[]){
     fs.close();
 
     if(totalError > 0){
-        cout<<"Response file Written to "<<outputLocation<<" with "<<totalError<<" error(s)."<<endl;
+        cout<<"\nResponse file Written to "<<outputLocation<<" with "<<totalError<<" error(s)."<<endl;
     }else{
-        cout<<"Response file written to "<<outputLocation<<" successfully."<<endl;
+        cout<<"\nResponse file written to "<<outputLocation<<" successfully."<<endl;
     }
 
     return 0;
