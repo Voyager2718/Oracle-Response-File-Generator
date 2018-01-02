@@ -71,6 +71,8 @@ using std::list;
 
 int numberOfNodes = -1;
 
+int totalError = 0;
+
 bool silentMode = false;
 
 string prefix(string hostname);
@@ -82,7 +84,7 @@ string modify(string mayNeedToModify);
   * Convert functions should be put here.
   */
 
-string getSCANName(){
+string getSCANName(string itemName){
     char hostname[1024];
 
     gethostname(hostname, sizeof(hostname));
@@ -103,7 +105,7 @@ string getSCANName(){
     return result;
 }
 
-string getClusterNodes(){
+string getClusterNodes(string itemName){
     char hstn[1024];
 
     gethostname(hstn, sizeof(hstn));
@@ -186,7 +188,7 @@ string getClusterNodes(){
     return result;
 } 
 
-string getNetworkInterfaceList(){
+string getNetworkInterfaceList(string itemName){
     struct ifaddrs *ifaddr;
     struct sockaddr_in *sa;
     struct sockaddr_in *mask_sa;
@@ -229,6 +231,13 @@ string getNetworkInterfaceList(){
 #endif
 
     return result;
+}
+
+string userEdit(string itemName){
+    cout<<"Enter the value for <"<<itemName<<">:"<<endl;
+    string val;
+    cin>>val;
+    return val;
 }
 
 /**
@@ -389,30 +398,33 @@ map<string,string> parseResponseFileTemplate(string rspPath){
     return m;
 }
 
-string callFunction(string functionName){
+string callFunction(string itemName, string functionName){
     if(functionName == "getSCANName"){
-        return getSCANName();
+        return getSCANName(itemName);
     }else if(functionName == "getClusterNodes"){
-        return getClusterNodes();
+        return getClusterNodes(itemName);
     }else if(functionName == "getNetworkInterfaceList"){
-        return getNetworkInterfaceList();
+        return getNetworkInterfaceList(itemName);
+    }else if(functionName == "userEdit"){
+        return userEdit(itemName);
     }
 
+    totalError ++;
     return "-> RSP Generator error: No such function <-";
 }
 
-string parseDynamic(const string s){
+string parseDynamic(const string fst, const string sec){
     regex rgx(string("\\{\\{[\\s]*(\\w+)[\\s]*\\}\\}"));    // Dynamic call functions in {{ aaa }}.
 
     smatch match;
 
 #ifdef USE_BOOST
-    if(regex_search(s, match, rgx)){
-        return callFunction(match[1]);
+    if(regex_search(sec, match, rgx)){
+        return callFunction(fst, match[1]);
     }
 #else
-    if(regex_search(s.begin(), s.end(), match, rgx)){
-        return callFunction(match[1]);
+    if(regex_search(sec.begin(), sec.end(), match, rgx)){
+        return callFunction(fst, match[1]);
     }
 #endif
 
@@ -423,7 +435,7 @@ map<string, string> parseFunctions(map<string,string> m){
     string dym;
 
     for (map<string,string>::iterator it=m.begin(); it!=m.end(); ++it){
-        dym = parseDynamic(it->second);
+        dym = parseDynamic(it->first, it->second);
         if(dym != ""){
             it->second = dym;
         }
@@ -433,19 +445,20 @@ map<string, string> parseFunctions(map<string,string> m){
 }
 
 void printUsage(){
-    cout<<"Usage: rspg [OPTION]\n\
-Generate response file by local configurations. v0.1.1\n\n\
-  -t\ttemplate file location. Default: template.rsp\n\
-  -o\toutput location.\n\
-  -n\tnumber of nodes.\n\
-  -s\tsilent mode. Generated values are not displayed and do not allow users to modify.\n\
-  -h\tdisplay this help and exit\n\n\
+    cout<<"Usage: rspg [OPTION]...\n\
+Generate response file by local configurations. v0.1.2\n\n\
+  -t <template file>    template file location. Default: template.rsp\n\
+  -o <output file>      output location.\n\
+  -n <integer>          number of nodes.\n\
+  -s                    silent mode. Generated values are not displayed and do not allow users to modify.\n\
+  -h                    display the help and exit\n\n\
 Template syntax:\n\
   {{<function_name>}}\t<function_name> specifies the function that will be called during the generation.\n\n\
 Supported functions:\n\
   getClusterNodes              generate value for oracle.install.crs.config.clusterNodes. E.g. rws1270317:rws1270317-v:HUB\n\
   getNetworkInterfaceList      generate value for oracle.install.crs.config.networkInterfaceList. E.g. eth0:10.214.64.0:1\n\
-  getSCANName                  generate value for oracle.install.crs.config.gpnp.scanName. E.g. rws12703170320-r"<<endl;
+  getSCANName                  generate value for oracle.install.crs.config.gpnp.scanName. E.g. rws12703170320-r\n\
+  userEdit                     let user to determine the value at runtime."<<endl;
 }
 
 int main(int argc, char *argv[]){
@@ -499,12 +512,20 @@ int main(int argc, char *argv[]){
     std::fstream fs;
     fs.open(outputLocation, std::fstream::in | std::fstream::out | std::fstream::app);
 
-    for (map<string,string>::iterator it=m.begin(); it!=m.end(); ++it){
-        cout<<it->first<<" -> "<<it->second<<endl;
-        fs<<it->first<<"="<<it->second<<endl;
+    if(!silentMode){
+        for (map<string,string>::iterator it=m.begin(); it!=m.end(); ++it){
+            cout<<it->first<<" -> "<<it->second<<endl;
+            fs<<it->first<<"="<<it->second<<endl;
+        }
     }
 
     fs.close();
+
+    if(totalError > 0){
+        cout<<"Response file Written to "<<outputLocation<<" with "<<totalError<<" error(s)."<<endl;
+    }else{
+        cout<<"Response file written to "<<outputLocation<<" successfully."<<endl;
+    }
 
     return 0;
 }
