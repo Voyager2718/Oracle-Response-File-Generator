@@ -368,7 +368,14 @@ bool canBeUsedForDG(string diskPath){
 map<string,string> parseResponseFileTemplate(string rspPath){
     ifstream rspStream(rspPath);
 
-    string responseFileWithComment((istreambuf_iterator<char>(rspStream)), (istreambuf_iterator<char>()));
+    string responseFileWithComment;
+
+    try{    
+        responseFileWithComment = string((istreambuf_iterator<char>(rspStream)), (istreambuf_iterator<char>()));
+    }catch(std::ios_base::failure &e){
+        cout<<"Invalid template."<<endl;
+        exit(EXIT_FAILURE);
+    }
 
     string pureResponseFile = "";
 
