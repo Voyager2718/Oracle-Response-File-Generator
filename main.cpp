@@ -525,11 +525,11 @@ int main(int argc, char *argv[]){
     std::fstream fs;
     fs.open(outputLocation, std::fstream::in | std::fstream::out | std::fstream::trunc);
 
-    if(!silentMode){
-        for (map<string,string>::iterator it=m.begin(); it!=m.end(); ++it){
+    for (map<string,string>::iterator it=m.begin(); it!=m.end(); ++it){
+        if(!silentMode){
             cout<<it->first<<" -> "<<it->second<<endl;
-            fs<<it->first<<"="<<it->second<<endl;
         }
+        fs<<it->first<<"="<<it->second<<endl;
     }
 
     fs.close();
