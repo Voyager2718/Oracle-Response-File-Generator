@@ -8,7 +8,7 @@
 
 #define ALLOW_CORRECTION
 #define USE_BOOST
-#define VERSION "v0.2.2"
+#define VERSION "v0.3.5"
 
 #include <iostream>
 #include <string>
@@ -33,7 +33,7 @@
 #include <string.h>
 
 #include <map>
-#include <list>
+#include <vector>
 
 #ifdef USE_BOOST
 #include <boost/regex.hpp>
@@ -69,7 +69,7 @@ using std::regex_error;
 #endif
 
 using std::map;
-using std::list;
+using std::vector;
 
 int numberOfNodes = -1;
 
@@ -78,6 +78,8 @@ int totalError = 0;
 bool silentMode = false;
 
 string correctedHostname = "";
+
+string discoveryString = "";
 
 string prefix(string hostname);
 
@@ -89,6 +91,10 @@ int patternDetection();
 
 string clusterSuffix();
 
+bool canBeUsedForDG(string diskPath);
+
+vector<string> getUsableDiskList(string path);
+
 int patternIndex = -1;
 
 /**
@@ -97,6 +103,94 @@ int patternIndex = -1;
   * When the parser has extracted the function name, it will invoke callFunction, then callFunction will invoke functions that are written here.
   * Don't forget to add function name and function binding to callFunction. 
   */
+
+string getDGWithFG(string itemName){
+    vector<string> l = getUsableDiskList(discoveryString);
+
+    cout<<"Following are the disks that can be used for "<<itemName<<"."<<endl;
+
+    for(int i = 0; i < l.size(); i++){
+        cout<<i+1<<". "<<l[i]<<endl;
+    }
+
+    cout<<"Please select the disk that you want to use. One disk each input, enter 0 to finish."<<endl;
+
+    string index;
+    cin>>index;
+
+    vector<string> selected;
+
+    while(index != "0"){
+        try{
+            int i = stoi(index);
+            selected.push_back(l[i - 1]);
+        }catch(const invalid_argument &e){
+            cout<<"Invalid input."<<endl;
+        }
+        cin>>index;
+    }
+
+    string result = "";
+
+    for(int i = 0; i < selected.size(); i++){
+        result += selected[i] + ",,";
+    }
+
+    result = result.substr(0, result.length() - 1);
+
+#ifdef ALLOW_CORRECTION
+    if(!silentMode){
+        cout<<"DG with Failure Group detection result: "<<endl;
+        result = modify(result);
+    }
+#endif
+
+    return result;
+}
+
+string getDG(string itemName){
+    vector<string> l = getUsableDiskList(discoveryString);
+
+    cout<<"Following are the disks that can be used for "<<itemName<<"."<<endl;
+
+    for(int i = 0; i < l.size(); i++){
+        cout<<i+1<<". "<<l[i]<<endl;
+    }
+
+    cout<<"Please select the disk that you want to use. One disk each input, enter 0 to finish."<<endl;
+
+    string index;
+    cin>>index;
+
+    vector<string> selected;
+
+    while(index != "0"){
+        try{
+            int i = stoi(index);
+            selected.push_back(l[i - 1]);
+        }catch(const invalid_argument &e){
+            cout<<"Invalid input."<<endl;
+        }
+        cin>>index;
+    }
+
+    string result = "";
+
+    for(int i = 0; i < selected.size(); i++){
+        result += selected[i] + ",";
+    }
+
+    result = result.substr(0, result.length() - 1);
+
+#ifdef ALLOW_CORRECTION
+    if(!silentMode){
+        cout<<"DG detection result: "<<endl;
+        result = modify(result);
+    }
+#endif
+
+    return result;
+}
 
 string getSCANName(string itemName){
     string hostname = getHostname();
@@ -119,8 +213,6 @@ string getClusterNodes(string itemName){
     string var = getHostname().substr(patternDetection());
 
     string hostname = getHostname();
-
-    cout<<"var: "<<var<<endl;
 
     string result = "";
 
@@ -229,6 +321,52 @@ string userEdit(string itemName){
   * ==== Worker functions ====
   */
 
+vector<string> getUsableDiskList(string path){
+    try{
+        DIR *dir = opendir(path.c_str());
+
+        vector<struct dirent*> dlist;
+
+        struct dirent *d = readdir(dir);
+
+        while(d){
+            if(d->d_type==DT_BLK){
+                dlist.push_back(d);
+            }else if(d->d_type==DT_LNK){
+                char buffer[1024];
+
+                memset(buffer, 0, sizeof(buffer));
+
+                readlink((string(path)+"/"+string(d->d_name)).c_str(), buffer, sizeof(buffer));
+
+                string p = string(path)+"/"+string(buffer);
+
+                struct stat s;
+                stat(p.c_str(), &s);
+
+                if(S_ISBLK(s.st_mode)){
+                    dlist.push_back(d);
+                }
+            }
+            d = readdir(dir);
+        }
+
+        vector<string> ret;
+
+        for(auto &d : dlist){
+            if(canBeUsedForDG(string(path) + "/" + string(d->d_name))){
+                ret.push_back(string(path) + "/" + string(d->d_name));
+            }
+        }
+
+        return ret;
+    }catch(...){
+        vector<string>ret;
+        return ret;
+    }
+}
+
+
 // Print detected values and allow user to modify.
 string modify(string mayNeedToModify){
     string input;
@@ -312,8 +450,6 @@ string clusterSuffix(){
 
     int l = var.length();
 
-    cout<<"var2: "<<var<<endl;
-
     string result = "";
 
     try{
@@ -325,13 +461,7 @@ string clusterSuffix(){
     }catch(const invalid_argument& e){  // string suffix.
         char c = (char)((int)(var.substr(l - 1, 1).c_str()[0]) + numberOfNodes - 1);
 
-        cout<<"(int)var.substr(l - 1, 1).c_str()[0]: "<<(int)(var.substr(l - 1, 1).c_str()[0])<<endl;
-
-        cout<<"c: "<<(int)c<<endl;
-
         int carry = (int)((c - 97) / 26);
-
-        cout<<"carry: "<<carry<<endl;
 
         if((int) c > 122){
             c = (char)(c - 26);
@@ -341,8 +471,6 @@ string clusterSuffix(){
 
         for(int i = 2; i <= l; i ++){
             char c = (char)((int)(var.substr(l - i, 1).c_str()[0]) + carry);
-
-            cout<<"c2: "<<(int)c<<endl;
 
             carry = (int)((c - 97) / 26);
 
@@ -354,8 +482,6 @@ string clusterSuffix(){
             result = string(1, c) + result;
         }
     }
-
-    cout<<"result: "<<result<<endl;
     
     return result;
 }
@@ -449,6 +575,10 @@ map<string,string> parseResponseFileTemplate(string rspPath){
         m[key] = val;
     }
 
+    if(m.find("oracle.install.asm.diskGroup.diskDiscoveryString") != m.end()){
+        discoveryString = m["oracle.install.asm.diskGroup.diskDiscoveryString"];
+    }
+
     return m;
 }
 
@@ -462,6 +592,10 @@ string callFunction(string itemName, string functionName){
         return getNetworkInterfaceList(itemName);
     }else if(functionName == "userEdit"){
         return userEdit(itemName);
+    }else if(functionName == "getDG"){
+        return getDG(itemName);
+    }else if(functionName == "getDGWithFG"){
+        return getDGWithFG(itemName);
     }
 
     totalError ++;
@@ -504,6 +638,7 @@ map<string, string> parseFunctions(map<string,string> m){
 void printUsage(){
     cout<<"Usage: rspg [OPTION]...\n\
 Generate response file by local configurations. "<<VERSION<<"\n\n\
+For source code, please refer to github.com/Voyager2718/Oracle-Response-File-Generator\n\n\
   -t <template file>    template file location. Default: template.rsp\n\
   -o <output file>      output location.\n\
   -n <integer>          number of nodes.\n\
@@ -512,10 +647,12 @@ Generate response file by local configurations. "<<VERSION<<"\n\n\
 Template syntax:\n\
   {{<function_name>}}\t<function_name> specifies the function that will be called during the generation.\n\n\
 Supported functions:\n\
-  getClusterNodes              generate value for oracle.install.crs.config.clusterNodes. E.g. rws1270317:rws1270317-v:HUB\n\
-  getNetworkInterfaceList      generate value for oracle.install.crs.config.networkInterfaceList. E.g. eth0:10.214.64.0:1\n\
-  getSCANName                  generate value for oracle.install.crs.config.gpnp.scanName. E.g. rws12703170320-r\n\
-  userEdit                     let user to determine the value at runtime."<<endl;
+  getClusterNodes              generates value for oracle.install.crs.config.clusterNodes. E.g. rws1270317:rws1270317-v:HUB\n\
+  getNetworkInterfaceList      generates value for oracle.install.crs.config.networkInterfaceList. E.g. eth0:10.214.64.0:1\n\
+  getSCANName                  generates value for oracle.install.crs.config.gpnp.scanName. E.g. rws12703170320-r\n\
+  getDG                        lists all usable disks and let user decide which to be used for DG.\n\
+  getDGWithFG                  lists all usable disks and let user decide which to be used for DG with Failure Group.\n\
+  userEdit                     lets user to determine the value at runtime."<<endl;
 }
 
 int main(int argc, char *argv[]){
