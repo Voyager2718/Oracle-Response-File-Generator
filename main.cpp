@@ -8,7 +8,8 @@
 
 #define ALLOW_CORRECTION
 #define USE_BOOST
-#define VERSION "v0.3.7"
+
+#define VERSION "v0.3.10"
 
 #include <iostream>
 #include <string>
@@ -317,6 +318,10 @@ string userEdit(string itemName){
     cout<<"Enter the value for <"<<itemName<<">:"<<endl;
     string val;
     cin>>val;
+    if(itemName == "oracle.install.asm.diskGroup.diskDiscoveryString"){
+        discoveryString = val;
+    }
+
     return val;
 }
 
@@ -711,6 +716,10 @@ int main(int argc, char *argv[]){
     }
 
     map<string,string> m = parseFunctions(parseResponseFileTemplate(templateLocation));
+
+    if(m.find("oracle.install.asm.diskGroup.diskDiscoveryString") != m.end()){
+        m["oracle.install.asm.diskGroup.diskDiscoveryString"] = discoveryString;
+    }
 
     std::fstream fs;
     fs.open(outputLocation, std::fstream::in | std::fstream::out | std::fstream::trunc);
