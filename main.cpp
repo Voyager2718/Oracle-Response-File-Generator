@@ -8,7 +8,7 @@
 
 #define ALLOW_CORRECTION
 #define USE_BOOST
-#define VERSION "v0.2.1"
+#define VERSION "v0.2.2"
 
 #include <iostream>
 #include <string>
@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <dirent.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -76,9 +77,19 @@ int totalError = 0;
 
 bool silentMode = false;
 
+string correctedHostname = "";
+
 string prefix(string hostname);
 
 string modify(string mayNeedToModify);
+
+string getHostname();
+
+int patternDetection();
+
+string clusterSuffix();
+
+int patternIndex = -1;
 
 /**
   * ==== Convert Functions Part ====
@@ -88,15 +99,11 @@ string modify(string mayNeedToModify);
   */
 
 string getSCANName(string itemName){
-    char hostname[1024];
+    string hostname = getHostname();
 
-    gethostname(hostname, sizeof(hostname));
+    hostname = regex_replace(hostname, regex(string(".us.oracle.com")), string(""));    // Remove suffix.
 
-    string hstn(hostname);
-
-    hstn = regex_replace(hstn, regex(string(".us.oracle.com")), string(""));    // Remove suffix.
-
-    string result = prefix(hstn) + "-r";
+    string result = prefix(hostname) + "-r";
 
 #ifdef ALLOW_CORRECTION
     if(!silentMode){
@@ -109,38 +116,13 @@ string getSCANName(string itemName){
 }
 
 string getClusterNodes(string itemName){
-    char hstn[1024];
+    string var = getHostname().substr(patternDetection());
 
-    gethostname(hstn, sizeof(hstn));
+    string hostname = getHostname();
 
-    string hostname(hstn);
-
-    hostname = regex_replace(hostname, regex(string(".us.oracle.com")), string(""));    // Remove suffix.
+    cout<<"var: "<<var<<endl;
 
     string result = "";
-
-    bool isAlphabetic = false;
-
-    string var = "";
-
-    const char *tmpc = hostname.substr(hostname.length() - 2, 1).c_str();
-    if(!((int)tmpc[0] >= 48 && (int)tmpc[0] <= 57)){
-        isAlphabetic = true;
-    }
-
-    var += hostname.substr(hostname.length() - 1, 1);
-
-    for(int i = 1; i < hostname.length(); i++){
-        const char *c = hostname.substr(hostname.length() - i - 1, 1).c_str();
-        if((isAlphabetic && ((int)c[0] >= 48 && (int)c[0] <= 57)) || (!isAlphabetic && !((int)c[0] >= 48 && (int)c[0] <= 57))){
-            break;
-        }
-        var += hostname.substr(hostname.length() - i - 1, 1);
-    }
-
-    var = var.substr(0, 4);
-
-    reverse(var.begin(), var.end());
 
     int l = var.length();
 
@@ -183,8 +165,8 @@ string getClusterNodes(string itemName){
 
 #ifdef ALLOW_CORRECTION
     if(!silentMode){
-    cout<<"Cluster nodes detection result: "<<endl;
-    result = modify(result);
+        cout<<"Cluster nodes detection result: "<<endl;
+        result = modify(result);
     }
 #endif
 
@@ -247,7 +229,6 @@ string userEdit(string itemName){
   * ==== Worker functions ====
   */
 
-
 // Print detected values and allow user to modify.
 string modify(string mayNeedToModify){
     string input;
@@ -268,43 +249,89 @@ string modify(string mayNeedToModify){
 }
 
 // Generate SCAN/GNS prefix. (E.g. If node hostname is rws1270317 with 4 nodes, then it will generate rws12703170320)
-string prefix(string hostname){
-    bool isAlphabetic = false;
+string getHostname(){
+    char hstn[1024];
+    gethostname(hstn, sizeof(hstn));
+    string hostname(hstn);
 
-    string var = "";
+    if(correctedHostname != ""){
+        return correctedHostname;
+    }
+
+    hostname = regex_replace(hostname, regex(string(".us.oracle.com")), string(""));    // Remove suffix.
+
+    return hostname;
+}
+
+int patternDetection(){
+    string hostname = getHostname();
+
+    bool isAlphabetic = false;
 
     const char *tmpc = hostname.substr(hostname.length() - 2, 1).c_str();
     if(!((int)tmpc[0] >= 48 && (int)tmpc[0] <= 57)){
         isAlphabetic = true;
     }
 
-    var += hostname.substr(hostname.length() - 1, 1);
+    int backIndex = 1;
 
-    for(int i = 1; i < hostname.length(); i++){
-        const char *c = hostname.substr(hostname.length() - i - 1, 1).c_str();
+    for(; backIndex < hostname.length(); backIndex++){
+        const char *c = hostname.substr(hostname.length() - backIndex - 1, 1).c_str();
         if((isAlphabetic && ((int)c[0] >= 48 && (int)c[0] <= 57)) || (!isAlphabetic && !((int)c[0] >= 48 && (int)c[0] <= 57))){
             break;
         }
-        var += hostname.substr(hostname.length() - i - 1, 1);
     }
 
-    var = var.substr(0, 4);
+    backIndex = backIndex > 4 ? 4 : backIndex;
 
-    reverse(var.begin(), var.end());
+    patternIndex = hostname.length() - backIndex;
+
+#ifdef ALLOW_CORRECTION
+    string modified;
+
+    if(!silentMode){
+        cout<<"Cluster pattern detection result: "<<endl;
+        modified = modify(hostname.substr(0, patternIndex) + "|" + hostname.substr(patternIndex));
+        int slashIndex = modified.find("|");
+
+        correctedHostname = modified.substr(0,slashIndex) + modified.substr(slashIndex+1);
+        return slashIndex;
+    }
+#endif
+
+    return hostname.length() - backIndex;
+}
+
+// Return 0320 on host rws1270317 with 4 nodes.
+string clusterSuffix(){
+    if(patternIndex < 0){
+        patternIndex = patternDetection();
+    }
+
+    string var = getHostname().substr(patternIndex);
 
     int l = var.length();
+
+    cout<<"var2: "<<var<<endl;
 
     string result = "";
 
     try{
-        result = to_string((stoi(var) + numberOfNodes - 1));  // string suffix.
+        result = to_string((stoi(var) + numberOfNodes - 1));  // number suffix.
 
         for(int i = result.length(); i < l; i++){
             result = "0" + result;
         }
-    }catch(const invalid_argument& e){  // number suffix.
+    }catch(const invalid_argument& e){  // string suffix.
         char c = (char)((int)(var.substr(l - 1, 1).c_str()[0]) + numberOfNodes - 1);
+
+        cout<<"(int)var.substr(l - 1, 1).c_str()[0]: "<<(int)(var.substr(l - 1, 1).c_str()[0])<<endl;
+
+        cout<<"c: "<<(int)c<<endl;
+
         int carry = (int)((c - 97) / 26);
+
+        cout<<"carry: "<<carry<<endl;
 
         if((int) c > 122){
             c = (char)(c - 26);
@@ -312,20 +339,30 @@ string prefix(string hostname){
 
         result = string(1, c) + result;
 
-        for(int i = 1; i < l; i ++){
-            char c = (char)((int)(var.substr(l - i - 1, 1).c_str()[0]) + carry);
+        for(int i = 2; i <= l; i ++){
+            char c = (char)((int)(var.substr(l - i, 1).c_str()[0]) + carry);
+
+            cout<<"c2: "<<(int)c<<endl;
+
             carry = (int)((c - 97) / 26);
 
             if((int) c > 122){
                 c = (char)(c - 26);
+                carry ++;
             }
 
             result = string(1, c) + result;
         }
     }
+
+    cout<<"result: "<<result<<endl;
     
-    return hostname + result;
-}    
+    return result;
+}
+
+string prefix(string hostname){
+    return getHostname() + clusterSuffix();
+} 
 
 /* Stringify char* read from disk head.
  * Cannot use string(char*) to do so since char* may not contains printable characters, so that it will cause problem.
@@ -513,8 +550,7 @@ int main(int argc, char *argv[]){
         cin>>outputLocation;
     }
 
-    while(numberOfNodes ==
-     -1){
+    while(numberOfNodes == -1){
         cout<<"Please enter the number of nodes:"<<endl;
         string n_nodes;
         cin>>n_nodes;
