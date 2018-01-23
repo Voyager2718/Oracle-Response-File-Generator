@@ -8,7 +8,7 @@
 
 #define ALLOW_CORRECTION
 #define USE_BOOST
-#define VERSION "v0.3.0"
+#define VERSION "v0.3.5"
 
 #include <iostream>
 #include <string>
@@ -149,7 +149,47 @@ string getDGWithFG(string itemName){
 }
 
 string getDG(string itemName){
-    return "";
+    vector<string> l = getUsableDiskList(discoveryString);
+
+    cout<<"Following are the disks that can be used for "<<itemName<<"."<<endl;
+
+    for(int i = 0; i < l.size(); i++){
+        cout<<i+1<<". "<<l[i]<<endl;
+    }
+
+    cout<<"Please select the disk that you want to use. One disk each input, enter 0 to finish."<<endl;
+
+    string index;
+    cin>>index;
+
+    vector<string> selected;
+
+    while(index != "0"){
+        try{
+            int i = stoi(index);
+            selected.push_back(l[i - 1]);
+        }catch(const invalid_argument &e){
+            cout<<"Invalid input."<<endl;
+        }
+        cin>>index;
+    }
+
+    string result = "";
+
+    for(int i = 0; i < selected.size(); i++){
+        result += selected[i] + ",";
+    }
+
+    result = result.substr(0, result.length() - 1);
+
+#ifdef ALLOW_CORRECTION
+    if(!silentMode){
+        cout<<"DG detection result: "<<endl;
+        result = modify(result);
+    }
+#endif
+
+    return result;
 }
 
 string getSCANName(string itemName){
@@ -598,6 +638,7 @@ map<string, string> parseFunctions(map<string,string> m){
 void printUsage(){
     cout<<"Usage: rspg [OPTION]...\n\
 Generate response file by local configurations. "<<VERSION<<"\n\n\
+For source code, please refer to github.com/Voyager2718/Oracle-Response-File-Generator\n\n\
   -t <template file>    template file location. Default: template.rsp\n\
   -o <output file>      output location.\n\
   -n <integer>          number of nodes.\n\
@@ -606,10 +647,12 @@ Generate response file by local configurations. "<<VERSION<<"\n\n\
 Template syntax:\n\
   {{<function_name>}}\t<function_name> specifies the function that will be called during the generation.\n\n\
 Supported functions:\n\
-  getClusterNodes              generate value for oracle.install.crs.config.clusterNodes. E.g. rws1270317:rws1270317-v:HUB\n\
-  getNetworkInterfaceList      generate value for oracle.install.crs.config.networkInterfaceList. E.g. eth0:10.214.64.0:1\n\
-  getSCANName                  generate value for oracle.install.crs.config.gpnp.scanName. E.g. rws12703170320-r\n\
-  userEdit                     let user to determine the value at runtime."<<endl;
+  getClusterNodes              generates value for oracle.install.crs.config.clusterNodes. E.g. rws1270317:rws1270317-v:HUB\n\
+  getNetworkInterfaceList      generates value for oracle.install.crs.config.networkInterfaceList. E.g. eth0:10.214.64.0:1\n\
+  getSCANName                  generates value for oracle.install.crs.config.gpnp.scanName. E.g. rws12703170320-r\n\
+  getDG                        lists all usable disks and let user decide which to be used for DG.\n\
+  getDGWithFG                  lists all usable disks and let user decide which to be used for DG with Failure Group.\n\
+  userEdit                     lets user to determine the value at runtime."<<endl;
 }
 
 int main(int argc, char *argv[]){
