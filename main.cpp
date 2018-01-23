@@ -8,7 +8,7 @@
 
 #define ALLOW_CORRECTION
 #define USE_BOOST
-#define VERSION "v0.3.5"
+#define VERSION "v0.3.10"
 
 #include <iostream>
 #include <string>
@@ -107,7 +107,7 @@ int patternIndex = -1;
 string getDGWithFG(string itemName){
     vector<string> l = getUsableDiskList(discoveryString);
 
-    cout<<"Following are the disks that can be used for "<<itemName<<"."<<endl;
+    cout<<"Following are the disks that can be used for <"<<itemName<<">."<<endl;
 
     for(int i = 0; i < l.size(); i++){
         cout<<i+1<<". "<<l[i]<<endl;
@@ -151,7 +151,7 @@ string getDGWithFG(string itemName){
 string getDG(string itemName){
     vector<string> l = getUsableDiskList(discoveryString);
 
-    cout<<"Following are the disks that can be used for "<<itemName<<"."<<endl;
+    cout<<"Following are the disks that can be used for <"<<itemName<<">."<<endl;
 
     for(int i = 0; i < l.size(); i++){
         cout<<i+1<<". "<<l[i]<<endl;
@@ -229,15 +229,17 @@ string getClusterNodes(string itemName){
             }
         }catch(const invalid_argument& e){  // number suffix.
             res = "";
-            char c = (char)((int)(var.substr(l - 1, 1).c_str()[0]) + i);
-            int carry = (int)((c - 97) / 26);
+            /*  First bit calculation from end  */
+            char c = (char)((int)(var.substr(l - 1, 1).c_str()[0]) + i);    // Get the last character of hostname.
+            int carry = (int)((c - 97) / 26);                               // Carry of hostname during the calculation.
 
             if((int) c > 122){
-                c = (char)(c - 26);
+                c = (char)(c - 26);                                         // Set character to from the beginning if exceeded maximum number.
             }
 
             res = string(1, c) + res;
 
+            /*  Rest bits calculation   */
             for(int i = 1; i < l; i ++){
                 char c = (char)((int)(var.substr(l - i - 1, 1).c_str()[0]) + carry);
                 carry = (int)((c - 97) / 26);
@@ -249,7 +251,8 @@ string getClusterNodes(string itemName){
                 res = string(1, c) + res;
             }
         }
-        string currentHostname = hostname.substr(0, hostname.length() - res.length()) + res;
+
+        string currentHostname = hostname.substr(0, hostname.length() - res.length()) + res;    // Add calculation results by steps.
         result += currentHostname + ":" + currentHostname + "-v:HUB,";
     }
 
@@ -280,18 +283,18 @@ string getNetworkInterfaceList(string itemName){
     int i = 0;
 
     do{
-        if(ifaddr->ifa_addr->sa_family == AF_INET && string(ifaddr->ifa_name) != "lo" && string(ifaddr->ifa_name).find(":") == std::string::npos){
-            sa = (struct sockaddr_in *) ifaddr->ifa_addr;
-            mask_sa = (struct sockaddr_in *) ifaddr->ifa_netmask;
+        if(ifaddr->ifa_addr->sa_family == AF_INET && string(ifaddr->ifa_name) != "lo" && string(ifaddr->ifa_name).find(":") == std::string::npos){  // List networks (No local and virtual networks)
+            sa = (struct sockaddr_in *) ifaddr->ifa_addr;           // Get IP address.
+            mask_sa = (struct sockaddr_in *) ifaddr->ifa_netmask;   // Get netmask.
 
             in_addr masked;
             masked.s_addr = (unsigned int) sa->sin_addr.s_addr & (unsigned int)mask_sa->sin_addr.s_addr;
-            result += (string(ifaddr->ifa_name) + string(":") + string(inet_ntoa(masked)));
+            result += (string(ifaddr->ifa_name) + string(":") + string(inet_ntoa(masked)));     // Mask IP with netmask.
 
             switch(i){
                 case 0: result += ":1,"; break;
                 case 1: result += ":5,"; break;
-                default:result += ":3,"; break;
+                default:result += ":3,"; break;                     // 1 for public, 1 for ASM & private, others for nothing.
             }
             i++;
         }
@@ -314,6 +317,10 @@ string userEdit(string itemName){
     cout<<"Enter the value for <"<<itemName<<">:"<<endl;
     string val;
     cin>>val;
+    if(itemName == "oracle.install.asm.diskGroup.diskDiscoveryString"){
+        discoveryString = val;
+    }
+
     return val;
 }
 
@@ -322,47 +329,56 @@ string userEdit(string itemName){
   */
 
 vector<string> getUsableDiskList(string path){
-    try{
-        DIR *dir = opendir(path.c_str());
+    while(true){
+        try{
+            DIR *dir = opendir(path.c_str());
 
-        vector<struct dirent*> dlist;
+            vector<struct dirent*> dlist;
 
-        struct dirent *d = readdir(dir);
+            if(!dir){
+                cout<<"Invalid ASM discovery string, please re-enter here:"<<endl;
+                cin>>discoveryString;
+                path = discoveryString;
+                continue;
+            }
 
-        while(d){
-            if(d->d_type==DT_BLK){
-                dlist.push_back(d);
-            }else if(d->d_type==DT_LNK){
-                char buffer[1024];
+            struct dirent *d = readdir(dir);
 
-                memset(buffer, 0, sizeof(buffer));
-
-                readlink((string(path)+"/"+string(d->d_name)).c_str(), buffer, sizeof(buffer));
-
-                string p = string(path)+"/"+string(buffer);
-
-                struct stat s;
-                stat(p.c_str(), &s);
-
-                if(S_ISBLK(s.st_mode)){
+            while(d){
+                if(d->d_type==DT_BLK){      // Block device
                     dlist.push_back(d);
+                }else if(d->d_type==DT_LNK){    // Read physical device if it is a link.
+                    char buffer[1024];
+
+                    memset(buffer, 0, sizeof(buffer));
+
+                    readlink((string(path)+"/"+string(d->d_name)).c_str(), buffer, sizeof(buffer));
+
+                    string p = string(path)+"/"+string(buffer);
+
+                    struct stat s;
+                    stat(p.c_str(), &s);
+
+                    if(S_ISBLK(s.st_mode)){     // Block device
+                        dlist.push_back(d);
+                    }
+                }
+                d = readdir(dir);
+            }
+
+            vector<string> ret;
+
+            for(auto &d : dlist){
+                if(canBeUsedForDG(string(path) + "/" + string(d->d_name))){
+                    ret.push_back(string(path) + "/" + string(d->d_name));
                 }
             }
-            d = readdir(dir);
+
+            return ret;
+        }catch(...){
+            cout<<"Invalid ASM discovery string, please enter here:"<<endl;
+            cin>>discoveryString;
         }
-
-        vector<string> ret;
-
-        for(auto &d : dlist){
-            if(canBeUsedForDG(string(path) + "/" + string(d->d_name))){
-                ret.push_back(string(path) + "/" + string(d->d_name));
-            }
-        }
-
-        return ret;
-    }catch(...){
-        vector<string>ret;
-        return ret;
     }
 }
 
@@ -406,7 +422,7 @@ int patternDetection(){
 
     bool isAlphabetic = false;
 
-    const char *tmpc = hostname.substr(hostname.length() - 2, 1).c_str();
+    const char *tmpc = hostname.substr(hostname.length() - 2, 1).c_str();   // Detect from end to see if it's digits or alphabets.
     if(!((int)tmpc[0] >= 48 && (int)tmpc[0] <= 57)){
         isAlphabetic = true;
     }
@@ -416,11 +432,11 @@ int patternDetection(){
     for(; backIndex < hostname.length(); backIndex++){
         const char *c = hostname.substr(hostname.length() - backIndex - 1, 1).c_str();
         if((isAlphabetic && ((int)c[0] >= 48 && (int)c[0] <= 57)) || (!isAlphabetic && !((int)c[0] >= 48 && (int)c[0] <= 57))){
-            break;
+            break;  // If switch from digits to alphabet, then consider that it's a separation of pattern. Vice versa.
         }
     }
 
-    backIndex = backIndex > 4 ? 4 : backIndex;
+    backIndex = backIndex > 4 ? 4 : backIndex;  // Maximum 4 as pattern.
 
     patternIndex = hostname.length() - backIndex;
 
@@ -429,7 +445,7 @@ int patternDetection(){
 
     if(!silentMode){
         cout<<"Cluster pattern detection result: "<<endl;
-        modified = modify(hostname.substr(0, patternIndex) + "|" + hostname.substr(patternIndex));
+        modified = modify(hostname.substr(0, patternIndex) + "|" + hostname.substr(patternIndex));  // Pattern should be separated by '|'.
         int slashIndex = modified.find("|");
 
         correctedHostname = modified.substr(0,slashIndex) + modified.substr(slashIndex+1);
@@ -701,6 +717,10 @@ int main(int argc, char *argv[]){
     }
 
     map<string,string> m = parseFunctions(parseResponseFileTemplate(templateLocation));
+
+    if(m.find("oracle.install.asm.diskGroup.diskDiscoveryString") != m.end()){
+        m["oracle.install.asm.diskGroup.diskDiscoveryString"] = discoveryString;
+    }
 
     std::fstream fs;
     fs.open(outputLocation, std::fstream::in | std::fstream::out | std::fstream::trunc);
