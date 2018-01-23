@@ -8,7 +8,7 @@
 
 #define ALLOW_CORRECTION
 #define USE_BOOST
-#define VERSION "v0.3.5"
+#define VERSION "v0.3.7"
 
 #include <iostream>
 #include <string>
@@ -107,7 +107,7 @@ int patternIndex = -1;
 string getDGWithFG(string itemName){
     vector<string> l = getUsableDiskList(discoveryString);
 
-    cout<<"Following are the disks that can be used for "<<itemName<<"."<<endl;
+    cout<<"Following are the disks that can be used for <"<<itemName<<">."<<endl;
 
     for(int i = 0; i < l.size(); i++){
         cout<<i+1<<". "<<l[i]<<endl;
@@ -151,7 +151,7 @@ string getDGWithFG(string itemName){
 string getDG(string itemName){
     vector<string> l = getUsableDiskList(discoveryString);
 
-    cout<<"Following are the disks that can be used for "<<itemName<<"."<<endl;
+    cout<<"Following are the disks that can be used for <"<<itemName<<">."<<endl;
 
     for(int i = 0; i < l.size(); i++){
         cout<<i+1<<". "<<l[i]<<endl;
@@ -325,47 +325,54 @@ string userEdit(string itemName){
   */
 
 vector<string> getUsableDiskList(string path){
-    try{
-        DIR *dir = opendir(path.c_str());
+    while(true){
+        try{
+            DIR *dir = opendir(path.c_str());
 
-        vector<struct dirent*> dlist;
+            vector<struct dirent*> dlist;
 
-        struct dirent *d = readdir(dir);
+            if(!dir){
+                cout<<"Invalid ASM discovery string, please correct it in the template file or use {{userEdit}} to enter the value at each run."<<endl;
+                exit(EXIT_FAILURE);
+            }
 
-        while(d){
-            if(d->d_type==DT_BLK){      // Block device
-                dlist.push_back(d);
-            }else if(d->d_type==DT_LNK){    // Read physical device if it is a link.
-                char buffer[1024];
+            struct dirent *d = readdir(dir);
 
-                memset(buffer, 0, sizeof(buffer));
-
-                readlink((string(path)+"/"+string(d->d_name)).c_str(), buffer, sizeof(buffer));
-
-                string p = string(path)+"/"+string(buffer);
-
-                struct stat s;
-                stat(p.c_str(), &s);
-
-                if(S_ISBLK(s.st_mode)){     // Block device
+            while(d){
+                if(d->d_type==DT_BLK){      // Block device
                     dlist.push_back(d);
+                }else if(d->d_type==DT_LNK){    // Read physical device if it is a link.
+                    char buffer[1024];
+
+                    memset(buffer, 0, sizeof(buffer));
+
+                    readlink((string(path)+"/"+string(d->d_name)).c_str(), buffer, sizeof(buffer));
+
+                    string p = string(path)+"/"+string(buffer);
+
+                    struct stat s;
+                    stat(p.c_str(), &s);
+
+                    if(S_ISBLK(s.st_mode)){     // Block device
+                        dlist.push_back(d);
+                    }
+                }
+                d = readdir(dir);
+            }
+
+            vector<string> ret;
+
+            for(auto &d : dlist){
+                if(canBeUsedForDG(string(path) + "/" + string(d->d_name))){
+                    ret.push_back(string(path) + "/" + string(d->d_name));
                 }
             }
-            d = readdir(dir);
+
+            return ret;
+        }catch(...){
+            cout<<"Invalid ASM discovery string, please enter here:"<<endl;
+            cin>>discoveryString;
         }
-
-        vector<string> ret;
-
-        for(auto &d : dlist){
-            if(canBeUsedForDG(string(path) + "/" + string(d->d_name))){
-                ret.push_back(string(path) + "/" + string(d->d_name));
-            }
-        }
-
-        return ret;
-    }catch(...){
-        vector<string>ret;
-        return ret;
     }
 }
 
