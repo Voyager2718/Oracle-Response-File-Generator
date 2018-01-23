@@ -33,7 +33,7 @@
 #include <string.h>
 
 #include <map>
-#include <list>
+#include <vector>
 
 #ifdef USE_BOOST
 #include <boost/regex.hpp>
@@ -69,7 +69,7 @@ using std::regex_error;
 #endif
 
 using std::map;
-using std::list;
+using std::vector;
 
 int numberOfNodes = -1;
 
@@ -78,6 +78,8 @@ int totalError = 0;
 bool silentMode = false;
 
 string correctedHostname = "";
+
+string discoveryString = "";
 
 string prefix(string hostname);
 
@@ -91,6 +93,8 @@ string clusterSuffix();
 
 bool canBeUsedForDG(string diskPath);
 
+vector<string> getUsableDiskList(string path);
+
 int patternIndex = -1;
 
 /**
@@ -99,6 +103,54 @@ int patternIndex = -1;
   * When the parser has extracted the function name, it will invoke callFunction, then callFunction will invoke functions that are written here.
   * Don't forget to add function name and function binding to callFunction. 
   */
+
+string getDGWithFG(string itemName){
+    vector<string> l = getUsableDiskList(discoveryString);
+
+    cout<<"Following are the disks that can be used for "<<itemName<<"."<<endl;
+
+    for(int i = 0; i < l.size(); i++){
+        cout<<i+1<<". "<<l[i]<<endl;
+    }
+
+    cout<<"Please select the disk that you want to use. One disk each input, enter 0 to finish."<<endl;
+
+    string index;
+    cin>>index;
+
+    vector<string> selected;
+
+    while(index != "0"){
+        try{
+            int i = stoi(index);
+            selected.push_back(l[i - 1]);
+        }catch(const invalid_argument &e){
+            cout<<"Invalid input."<<endl;
+        }
+        cin>>index;
+    }
+
+    string result = "";
+
+    for(int i = 0; i < selected.size(); i++){
+        result += selected[i] + ",,";
+    }
+
+    result = result.substr(0, result.length() - 1);
+
+#ifdef ALLOW_CORRECTION
+    if(!silentMode){
+        cout<<"DG with Failure Group detection result: "<<endl;
+        result = modify(result);
+    }
+#endif
+
+    return result;
+}
+
+string getDG(string itemName){
+    return "";
+}
 
 string getSCANName(string itemName){
     string hostname = getHostname();
@@ -121,8 +173,6 @@ string getClusterNodes(string itemName){
     string var = getHostname().substr(patternDetection());
 
     string hostname = getHostname();
-
-    cout<<"var: "<<var<<endl;
 
     string result = "";
 
@@ -231,11 +281,11 @@ string userEdit(string itemName){
   * ==== Worker functions ====
   */
 
-list<string> getUsableDiskList(string path){
+vector<string> getUsableDiskList(string path){
     try{
         DIR *dir = opendir(path.c_str());
 
-        list<struct dirent*> dlist;
+        vector<struct dirent*> dlist;
 
         struct dirent *d = readdir(dir);
 
@@ -261,7 +311,7 @@ list<string> getUsableDiskList(string path){
             d = readdir(dir);
         }
 
-        list<string> ret;
+        vector<string> ret;
 
         for(auto &d : dlist){
             if(canBeUsedForDG(string(path) + "/" + string(d->d_name))){
@@ -271,7 +321,7 @@ list<string> getUsableDiskList(string path){
 
         return ret;
     }catch(...){
-        list<string>ret;
+        vector<string>ret;
         return ret;
     }
 }
@@ -360,8 +410,6 @@ string clusterSuffix(){
 
     int l = var.length();
 
-    cout<<"var2: "<<var<<endl;
-
     string result = "";
 
     try{
@@ -373,13 +421,7 @@ string clusterSuffix(){
     }catch(const invalid_argument& e){  // string suffix.
         char c = (char)((int)(var.substr(l - 1, 1).c_str()[0]) + numberOfNodes - 1);
 
-        cout<<"(int)var.substr(l - 1, 1).c_str()[0]: "<<(int)(var.substr(l - 1, 1).c_str()[0])<<endl;
-
-        cout<<"c: "<<(int)c<<endl;
-
         int carry = (int)((c - 97) / 26);
-
-        cout<<"carry: "<<carry<<endl;
 
         if((int) c > 122){
             c = (char)(c - 26);
@@ -389,8 +431,6 @@ string clusterSuffix(){
 
         for(int i = 2; i <= l; i ++){
             char c = (char)((int)(var.substr(l - i, 1).c_str()[0]) + carry);
-
-            cout<<"c2: "<<(int)c<<endl;
 
             carry = (int)((c - 97) / 26);
 
@@ -402,8 +442,6 @@ string clusterSuffix(){
             result = string(1, c) + result;
         }
     }
-
-    cout<<"result: "<<result<<endl;
     
     return result;
 }
@@ -497,6 +535,10 @@ map<string,string> parseResponseFileTemplate(string rspPath){
         m[key] = val;
     }
 
+    if(m.find("oracle.install.asm.diskGroup.diskDiscoveryString") != m.end()){
+        discoveryString = m["oracle.install.asm.diskGroup.diskDiscoveryString"];
+    }
+
     return m;
 }
 
@@ -510,6 +552,10 @@ string callFunction(string itemName, string functionName){
         return getNetworkInterfaceList(itemName);
     }else if(functionName == "userEdit"){
         return userEdit(itemName);
+    }else if(functionName == "getDG"){
+        return getDG(itemName);
+    }else if(functionName == "getDGWithFG"){
+        return getDGWithFG(itemName);
     }
 
     totalError ++;
