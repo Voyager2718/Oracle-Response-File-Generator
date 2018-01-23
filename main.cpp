@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <dirent.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -115,9 +116,11 @@ string getSCANName(string itemName){
 }
 
 string getClusterNodes(string itemName){
-    string var = clusterSuffix();
+    string var = getHostname().substr(patternDetection());
 
     string hostname = getHostname();
+
+    cout<<"var: "<<var<<endl;
 
     string result = "";
 
@@ -226,7 +229,6 @@ string userEdit(string itemName){
   * ==== Worker functions ====
   */
 
-
 // Print detected values and allow user to modify.
 string modify(string mayNeedToModify){
     string input;
@@ -292,8 +294,7 @@ int patternDetection(){
         modified = modify(hostname.substr(0, patternIndex) + "|" + hostname.substr(patternIndex));
         int slashIndex = modified.find("|");
 
-        correctedHostname = modified.substr(0,slashIndex) + modified.substr(slashIndex);
-
+        correctedHostname = modified.substr(0,slashIndex) + modified.substr(slashIndex+1);
         return slashIndex;
     }
 #endif
@@ -307,21 +308,30 @@ string clusterSuffix(){
         patternIndex = patternDetection();
     }
 
-    string var = getHostname().substr(patternIndex + 1);
+    string var = getHostname().substr(patternIndex);
 
     int l = var.length();
+
+    cout<<"var2: "<<var<<endl;
 
     string result = "";
 
     try{
-        result = to_string((stoi(var) + numberOfNodes - 1));  // string suffix.
+        result = to_string((stoi(var) + numberOfNodes - 1));  // number suffix.
 
         for(int i = result.length(); i < l; i++){
             result = "0" + result;
         }
-    }catch(const invalid_argument& e){  // number suffix.
-        char c = (char)((int)(var.substr(l, 1).c_str()[0]) + numberOfNodes - 1);
+    }catch(const invalid_argument& e){  // string suffix.
+        char c = (char)((int)(var.substr(l - 1, 1).c_str()[0]) + numberOfNodes - 1);
+
+        cout<<"(int)var.substr(l - 1, 1).c_str()[0]: "<<(int)(var.substr(l - 1, 1).c_str()[0])<<endl;
+
+        cout<<"c: "<<(int)c<<endl;
+
         int carry = (int)((c - 97) / 26);
+
+        cout<<"carry: "<<carry<<endl;
 
         if((int) c > 122){
             c = (char)(c - 26);
@@ -329,17 +339,23 @@ string clusterSuffix(){
 
         result = string(1, c) + result;
 
-        for(int i = 1; i < l; i ++){
+        for(int i = 2; i <= l; i ++){
             char c = (char)((int)(var.substr(l - i, 1).c_str()[0]) + carry);
+
+            cout<<"c2: "<<(int)c<<endl;
+
             carry = (int)((c - 97) / 26);
 
             if((int) c > 122){
                 c = (char)(c - 26);
+                carry ++;
             }
 
             result = string(1, c) + result;
         }
     }
+
+    cout<<"result: "<<result<<endl;
     
     return result;
 }
@@ -534,8 +550,7 @@ int main(int argc, char *argv[]){
         cin>>outputLocation;
     }
 
-    while(numberOfNodes ==
-     -1){
+    while(numberOfNodes == -1){
         cout<<"Please enter the number of nodes:"<<endl;
         string n_nodes;
         cin>>n_nodes;
