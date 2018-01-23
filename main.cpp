@@ -8,7 +8,7 @@
 
 #define ALLOW_CORRECTION
 #define USE_BOOST
-#define VERSION "v0.2.2"
+#define VERSION "v0.3.0"
 
 #include <iostream>
 #include <string>
@@ -88,6 +88,8 @@ string getHostname();
 int patternDetection();
 
 string clusterSuffix();
+
+bool canBeUsedForDG(string diskPath);
 
 int patternIndex = -1;
 
@@ -228,6 +230,52 @@ string userEdit(string itemName){
 /**
   * ==== Worker functions ====
   */
+
+list<string> getUsableDiskList(string path){
+    try{
+        DIR *dir = opendir(path.c_str());
+
+        list<struct dirent*> dlist;
+
+        struct dirent *d = readdir(dir);
+
+        while(d){
+            if(d->d_type==DT_BLK){
+                dlist.push_back(d);
+            }else if(d->d_type==DT_LNK){
+                char buffer[1024];
+
+                memset(buffer, 0, sizeof(buffer));
+
+                readlink((string(path)+"/"+string(d->d_name)).c_str(), buffer, sizeof(buffer));
+
+                string p = string(path)+"/"+string(buffer);
+
+                struct stat s;
+                stat(p.c_str(), &s);
+
+                if(S_ISBLK(s.st_mode)){
+                    dlist.push_back(d);
+                }
+            }
+            d = readdir(dir);
+        }
+
+        list<string> ret;
+
+        for(auto &d : dlist){
+            if(canBeUsedForDG(string(path) + "/" + string(d->d_name))){
+                ret.push_back(string(path) + "/" + string(d->d_name));
+            }
+        }
+
+        return ret;
+    }catch(...){
+        list<string>ret;
+        return ret;
+    }
+}
+
 
 // Print detected values and allow user to modify.
 string modify(string mayNeedToModify){
